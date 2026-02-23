@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Numerical Methods Visualizer</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/13.2.2/math.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1 class="title">Numerical Methods Visualizer</h1>
+
+    <!-- Method Selection -->
+    <div class="card">
+      <h2 class="card-title">Select Method</h2>
+      <div class="method-row">
+        <select id="methodSelect">
+          <option value="">Choose a method…</option>
+          <option value="bisection">Bisection Method</option>
+          <option value="falseposition">False Position Method</option>
+        </select>
+        <span id="methodBadge" class="badge hidden"></span>
+      </div>
+    </div>
+
+    <!-- Input Form -->
+    <div id="inputSection" class="card hidden">
+      <h2 class="card-title">Input Parameters</h2>
+      <div class="form-grid">
+        <div class="full-width">
+          <label>Function f(x)</label>
+          <input type="text" id="funcExpr" placeholder="x^3 - 4*x - 9" />
+        </div>
+        <div>
+          <label>xl (lower bound)</label>
+          <input type="number" id="xlInput" max="3"  placeholder="0" />
+        </div>
+        <div>
+          <label>xu (upper bound)</label>
+          <input type="number" id="xuInput" max="3" placeholder="0" />
+        </div>
+        <div>
+          <label>Epsilon (tolerance)</label>
+          <div class="input-with-suffix">
+            <input type="number" id="epsilonInput" step="any"  placeholder="0" />
+            <span class="suffix">%</span>
+          </div>
+        </div>
+        <div>
+          <label>Decimal Digits</label>
+          <input type="number" id="digitsInput" min="1" max="15" placeholder="0" />
+        </div>
+        <div class="full-width button-row">
+          <button id="solveBtn" class="solve-btn">Solve</button>
+          <span id="enterHint" class="enter-hint hidden">
+            Press <kbd>Enter</kbd> to reveal next step
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div id="errorBox" class="error-box hidden"></div>
+
+    <!-- Result Table -->
+    <div id="tableCard" class="card hidden">
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Iter</th>
+              <th>xl</th>
+              <th>f(xl)</th>
+              <th>xu</th>
+              <th>f(xu)</th>
+              <th>xr</th>
+              <th>f(xr)</th>
+              <th>Error %</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Final Result -->
+    <div id="resultBox" class="result-box hidden">
+      <p class="success-text">✅ Root Found Successfully</p>
+      <p class="root-text" id="rootValue"></p>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
