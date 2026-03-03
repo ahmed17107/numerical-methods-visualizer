@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Results — Numerical Methods Visualizer</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/13.2.2/math.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1 class="title">Results</h1>
+    <p id="methodLabel" class="method-label"></p>
+
+    <!-- Enter hint -->
+    <span id="enterHint" class="enter-hint">
+      Press <kbd>Enter</kbd> to reveal next step
+    </span>
+
+    <!-- Result Table -->
+    <div id="tableCard" class="card">
+      <div class="table-wrapper">
+        <table>
+          <thead id="tableHead"></thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div id="chartCard" class="card">
+      <h2 class="card-title">Visualization</h2>
+      <div class="tabs">
+        <button class="tab-btn" id="tabFunc" data-tab="functionTab">f(x) Graph</button>
+        <button class="tab-btn active" data-tab="convergenceTab">Convergence</button>
+        <button class="tab-btn" data-tab="errorTab">Error %</button>
+      </div>
+      <div id="functionTab" class="tab-content">
+        <canvas id="functionChart"></canvas>
+      </div>
+      <div id="convergenceTab" class="tab-content active">
+        <canvas id="convergenceChart"></canvas>
+      </div>
+      <div id="errorTab" class="tab-content">
+        <canvas id="errorChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Final Result -->
+    <div id="resultBox" class="result-box hidden">
+      <p class="success-text">✅ Root Found Successfully</p>
+      <p class="root-text" id="rootValue"></p>
+    </div>
+
+    <a href="index.html" class="back-link">← Back to Input</a>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
