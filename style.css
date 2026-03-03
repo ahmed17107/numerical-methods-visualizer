@@ -5,7 +5,7 @@
 }
 
 body {
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   background: linear-gradient(to bottom right, hsl(222, 47%, 11%), hsl(217, 33%, 17%));
   color: hsl(210, 40%, 98%);
   min-height: 100vh;
@@ -29,14 +29,13 @@ body {
   margin-top: 1rem;
 }
 
-/* Card */
 .card {
   width: 100%;
   background: hsl(217, 33%, 17%);
   border: 1px solid hsl(217, 33%, 25%);
   border-radius: 1rem;
   padding: 1.5rem;
-  box-shadow: 0 4px 20px hsl(187, 92%, 69%, 0.05);
+  box-shadow: 0 4px 20px hsla(187, 92%, 69%, 0.05);
   animation: fadeIn 0.4s ease-out forwards;
 }
 
@@ -47,12 +46,16 @@ body {
   color: hsl(210, 40%, 98%);
 }
 
-/* Method selector */
 .method-row {
   display: flex;
   align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
+}
+
+.method-label {
+  font-size: 1rem;
+  color: hsl(215, 20%, 65%);
 }
 
 select {
@@ -78,13 +81,12 @@ select:focus {
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 600;
-  background: hsl(187, 92%, 69%, 0.2);
+  background: hsla(187, 92%, 69%, 0.2);
   color: hsl(187, 92%, 69%);
-  border: 1px solid hsl(187, 92%, 69%, 0.3);
+  border: 1px solid hsla(187, 92%, 69%, 0.3);
   animation: fadeIn 0.4s ease-out forwards;
 }
 
-/* Form */
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -155,13 +157,13 @@ input::placeholder {
   font-weight: 600;
   font-size: 0.875rem;
   cursor: pointer;
-  box-shadow: 0 4px 15px hsl(187, 92%, 69%, 0.2);
+  box-shadow: 0 4px 15px hsla(187, 92%, 69%, 0.2);
   transition: all 0.3s ease;
 }
 
 .solve-btn:hover {
   transform: scale(1.05);
-  box-shadow: 0 4px 20px hsl(187, 92%, 69%, 0.4);
+  box-shadow: 0 4px 20px hsla(187, 92%, 69%, 0.4);
 }
 
 .enter-hint {
@@ -179,19 +181,17 @@ kbd {
   font-family: monospace;
 }
 
-/* Error */
 .error-box {
   width: 100%;
   padding: 1rem;
   border-radius: 1rem;
-  background: hsl(0, 84%, 60%, 0.1);
-  border: 1px solid hsl(0, 84%, 60%, 0.3);
+  background: hsla(0, 84%, 60%, 0.1);
+  border: 1px solid hsla(0, 84%, 60%, 0.3);
   color: hsl(0, 84%, 60%);
   font-size: 0.875rem;
   animation: fadeIn 0.4s ease-out forwards;
 }
 
-/* Table */
 .table-wrapper {
   overflow-x: auto;
 }
@@ -203,7 +203,7 @@ table {
 }
 
 thead tr {
-  background: hsl(187, 92%, 69%, 0.2);
+  background: hsla(187, 92%, 69%, 0.2);
 }
 
 th {
@@ -221,7 +221,7 @@ td {
 }
 
 tbody tr:nth-child(odd) {
-  background: hsl(217, 33%, 25%, 0.5);
+  background: hsla(217, 33%, 25%, 0.5);
 }
 
 tbody tr:nth-child(even) {
@@ -232,12 +232,52 @@ tbody tr {
   animation: fadeIn 0.4s ease-out forwards;
 }
 
-td.xr-cell {
+td.highlight {
   color: hsl(187, 92%, 69%);
   font-weight: 600;
 }
 
-/* Result */
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  background: hsl(217, 33%, 25%);
+  border-radius: 0.5rem;
+  padding: 0.25rem;
+  margin-bottom: 1rem;
+  width: fit-content;
+}
+
+.tab-btn {
+  padding: 0.4rem 1rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: hsl(215, 20%, 65%);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tab-btn.active {
+  background: hsl(217, 33%, 17%);
+  color: hsl(210, 40%, 98%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.tab-btn:hover:not(.active) {
+  color: hsl(210, 40%, 98%);
+}
+
+.tab-content {
+  display: none;
+  height: 350px;
+}
+
+.tab-content.active {
+  display: block;
+}
+
 .result-box {
   width: 100%;
   text-align: center;
@@ -259,29 +299,31 @@ td.xr-cell {
   letter-spacing: 0.05em;
 }
 
+.back-link {
+  color: hsl(187, 92%, 69%);
+  text-decoration: none;
+  font-size: 0.875rem;
+  margin-top: 1rem;
+  transition: opacity 0.2s;
+}
+
+.back-link:hover {
+  opacity: 0.7;
+}
+
 .hidden {
   display: none !important;
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @media (max-width: 640px) {
-  .title {
-    font-size: 1.5rem;
-  }
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
-  select {
-    width: 100%;
-  }
+  .title { font-size: 1.5rem; }
+  .form-grid { grid-template-columns: 1fr; }
+  select { width: 100%; }
+  .tabs { width: 100%; }
+  .tab-btn { flex: 1; text-align: center; font-size: 0.75rem; padding: 0.4rem 0.5rem; }
 }
