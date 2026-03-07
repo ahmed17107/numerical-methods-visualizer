@@ -42,16 +42,16 @@ project
 └── convergence.png
 ```
 ## Input Page
-![Input Page](input-page.png)
+![Input Page](input-page.png.png)
 
 ## Iteration Results
-![Iterations Table](iterations.png)
+![Iterations Table](iterations.png.png)
 
 ## Function Graph
-![Function Graph](graph.png)
+![Function Graph](graph.png.png)
 
 ## Convergence Chart
-![Convergence Chart](convergence.png)
+![Convergence Chart](convergence.png.png)
 
 ## Technologies Used
 
