@@ -52,6 +52,8 @@ function solveBracket(method, funcExpr, xlInit, xuInit, epsilon, maxIter) {
     const err = i === 1 ? 0 : Math.abs((xr - prevXr) / xr) * 100;
     rows.push({ iteration: i, xl, xu, xr, f_xl: fxl, f_xu: fxu, f_xr: fxr, error: err });
     if (epsilon !== null && err < epsilon && i > 1) break;
+    if (err === 0 && i > 1) break;
+    if (Math.abs(fxr) < 1e-14) break;
     if (fxl * fxr < 0) xu = xr; else xl = xr;
     prevXr = xr;
   }
@@ -66,6 +68,7 @@ function solveFixedPoint(gExpr, x0, epsilon, maxIter) {
     const err = i === 1 ? 0 : Math.abs((gxi - xi) / gxi) * 100;
     rows.push({ iteration: i, xi, gxi, error: err });
     if (epsilon !== null && err < epsilon && i > 1) break;
+    if (err === 0 && i > 1) break;
     xi = gxi;
   }
   return rows;
@@ -82,6 +85,8 @@ function solveNewton(funcExpr, dfExpr, x0, epsilon, maxIter) {
     const err = i === 1 ? 0 : Math.abs((xiPlus1 - xi) / xiPlus1) * 100;
     rows.push({ iteration: i, xi, fxi, fpxi, xiPlus1, error: err });
     if (epsilon !== null && err < epsilon && i > 1) break;
+    if (err === 0 && i > 1) break;
+    if (Math.abs(fxi) < 1e-14) break;
     xi = xiPlus1;
   }
   return rows;
@@ -100,8 +105,31 @@ function solveSecant(funcExpr, x0, x1, epsilon, maxIter) {
     const err = i === 1 ? 0 : Math.abs((xiPlus1 - xi) / xiPlus1) * 100;
     rows.push({ iteration: i, xi_1: xiPrev, xi: xi, f_xi_1: fPrev, f_xi: fCurr, xiPlus1: xiPlus1, error: err });
     if (epsilon !== null && err < epsilon && i > 1) break;
+    if (err === 0 && i > 1) break;
+    if (Math.abs(fCurr) < 1e-14) break;
     xiPrev = xi;
     xi = xiPlus1;
+  }
+  return rows;
+}
+// ─── NEW: Golden Section ───
+function solveGolden(funcExpr, xlInit, xuInit, optType, maxIter) {
+  const rows = [];
+  let xl = xlInit, xu = xuInit;
+  const R = (Math.sqrt(5) - 1) / 2;
+  const limit = maxIter || 8;
+  for (let i = 0; i < limit; i++) {
+    const d = R * (xu - xl);
+    const x1 = xl + d;
+    const x2 = xu - d;
+    const f1 = fEval(funcExpr, x1);
+    const f2 = fEval(funcExpr, x2);
+    rows.push({ iteration: i, xl, f_xl: fEval(funcExpr, xl), xu, f_xu: fEval(funcExpr, xu), x1, f_x1: f1, x2, f_x2: f2, d });
+    if (optType === "max") {
+      if (f1 > f2) xl = x2; else xu = x1;
+    } else {
+      if (f2 > f1) xl = x2; else xu = x1;
+    }
   }
   return rows;
 }
@@ -153,6 +181,12 @@ if (!isOutputPage) {
     inputSection.classList.remove("hidden");
     methodBadge.textContent = methodNames[m];
     methodBadge.classList.remove("hidden");
+
+    const polyActiveMethodBadge = document.getElementById("polyActiveMethodBadge");
+    if (polyActiveMethodBadge) {
+      polyActiveMethodBadge.textContent = methodNames[m];
+    }
+
     const isBracket = m === "bisection" || m === "falseposition";
     const isFP = m === "fixedpoint";
     const isN = m === "newton";
@@ -168,7 +202,7 @@ if (!isOutputPage) {
   document.getElementById("convertToGxBtn").addEventListener("click", function () {
     const fxStr = document.getElementById("funcExpr").value.trim();
     if (!fxStr) {
-      errorBox.textContent = "أدخل دالة f(x) أولاً ثم اضغط تحويل.";
+      errorBox.textContent = "Enter f(x) then click f'(x)";
       errorBox.classList.remove("hidden");
       return;
     }
@@ -177,7 +211,24 @@ if (!isOutputPage) {
       document.getElementById("gExpr").value = gExpr;
       errorBox.classList.add("hidden");
     } else {
-      errorBox.textContent = "تعذر التحويل. تأكد أن f(x) كثيرة حدود بصيغة x (مثل: x^3 - 4*x - 9).";
+      errorBox.textContent = "Conversion failed. Make sure f(x) is a polynomial in terms of x (e.g., x^3 - 4*x - 9).";
+      errorBox.classList.remove("hidden");
+    }
+  });
+
+  document.getElementById("calcDerivativeBtn").addEventListener("click", function () {
+    const fxStr = document.getElementById("funcExpr").value.trim();
+    if (!fxStr) {
+      errorBox.textContent = "Enter f(x) first, then click Calculate f'(x).";
+      errorBox.classList.remove("hidden");
+      return;
+    }
+    try {
+      const derivative = math.derivative(fxStr, 'x').toString();
+      document.getElementById("dfExpr").value = derivative;
+      errorBox.classList.add("hidden");
+    } catch (e) {
+      errorBox.textContent = "Failed to calculate derivative. Check the syntax of f(x).";
       errorBox.classList.remove("hidden");
     }
   });
@@ -223,12 +274,18 @@ if (!isOutputPage) {
           if (gExpr) document.getElementById("gExpr").value = gExpr;
         }
         const x0 = parseFloat(document.getElementById("x0Input").value);
-        if (!gExpr || isNaN(x0)) { errorBox.textContent = "أدخل g(x) و x₀، أو أدخل f(x) واضغط «تحويل» ثم x₀."; errorBox.classList.remove("hidden"); return; }
+        if (!gExpr || isNaN(x0)) { errorBox.textContent = "Enter g(x) and x₀, or enter f(x) and click 'Convert' then x₀."; errorBox.classList.remove("hidden"); return; }
         params.gExpr = gExpr;
         params.x0 = x0;
       } else if (m === "newton") {
         const funcExpr = document.getElementById("funcExpr").value.trim();
-        const dfExpr = document.getElementById("dfExpr").value.trim();
+        let dfExpr = document.getElementById("dfExpr").value.trim();
+        if (!dfExpr && funcExpr) {
+          try {
+            dfExpr = math.derivative(funcExpr, 'x').toString();
+            document.getElementById("dfExpr").value = dfExpr;
+          } catch (e) { }
+        }
         const x0 = parseFloat(document.getElementById("x0Input").value);
         if (!funcExpr || !dfExpr || isNaN(x0)) { errorBox.textContent = "Please fill f(x), f'(x) and x₀."; errorBox.classList.remove("hidden"); return; }
         params.funcExpr = funcExpr;
@@ -253,6 +310,68 @@ if (!isOutputPage) {
       errorBox.classList.remove("hidden");
     }
   });
+
+  document.getElementById("polyLoadExampleBtn").addEventListener("click", function () {
+    const m = methodSelect.value;
+    errorBox.classList.add("hidden");
+
+    // Reset shared fields
+    document.getElementById("gExpr").value = "";
+    document.getElementById("dfExpr").value = "";
+    document.getElementById("digitsInput").value = "6";
+    document.getElementById("stopSelect").value = "epsilon";
+    epsilonRow.classList.remove("hidden");
+    maxIterRow.classList.add("hidden");
+
+    if (m === "bisection") {
+      // f(x) = -2 + 7x - 5x^2 + 6x^3  |  xl=0, xu=1, error=10%
+      document.getElementById("funcExpr").value = "-2 + 7*x - 5*x^2 + 6*x^3";
+      document.getElementById("epsilonInput").value = "10";
+      document.getElementById("xlInput").value = "0";
+      document.getElementById("xuInput").value = "1";
+
+    } else if (m === "falseposition") {
+      // f(x) = -26 + 82.3x - 88x^2 + 45.4x^3 - 9x^4 + 0.65x^5  |  xl=0.5, xu=1, error=0.2%
+      document.getElementById("funcExpr").value = "-26 + 82.3*x - 88*x^2 + 45.4*x^3 - 9*x^4 + 0.65*x^5";
+      document.getElementById("epsilonInput").value = "0.2";
+      document.getElementById("xlInput").value = "0.5";
+      document.getElementById("xuInput").value = "1";
+
+    } else if (m === "fixedpoint") {
+      // f(x) = -0.9x^2 + 1.7x + 2.5  |  x0=5, error=0.7%
+      const fxStr = "-0.9*x^2 + 1.7*x + 2.5";
+      document.getElementById("funcExpr").value = fxStr;
+      document.getElementById("epsilonInput").value = "0.7";
+      document.getElementById("x0Input").value = "5";
+      const gExpr = convertFxToGx(fxStr);
+      document.getElementById("gExpr").value = gExpr || "";
+
+    } else if (m === "newton") {
+      // f(x) = -0.9x^2 + 1.7x + 2.5  |  x0=5, error=0.7%
+      const fxStr = "-0.9*x^2 + 1.7*x + 2.5";
+      document.getElementById("funcExpr").value = fxStr;
+      document.getElementById("epsilonInput").value = "0.7";
+      document.getElementById("x0Input").value = "5";
+      try {
+        document.getElementById("dfExpr").value = math.derivative(fxStr, "x").toString();
+      } catch (e) {
+        document.getElementById("dfExpr").value = "-1.8*x + 1.7";
+      }
+
+    } else if (m === "secant") {
+      // f(x) = 0.95x^3 - 5.9x^2 + 10.9x - 6  |  x-1=2.5, x0=3.5, error=0.5%
+      document.getElementById("funcExpr").value = "0.95*x^3 - 5.9*x^2 + 10.9*x - 6";
+      document.getElementById("epsilonInput").value = "0.5";
+      document.getElementById("x0Input").value = "2.5";
+      document.getElementById("x1Input").value = "3.5";
+
+    } else {
+      // No method selected yet — inform the user
+      errorBox.textContent = "Please select a method first, then click Load Example.";
+      errorBox.classList.remove("hidden");
+      return;
+    }
+  });
 }
 // ═══════════════════════════════════════════
 // OUTPUT PAGE LOGIC
@@ -261,7 +380,7 @@ if (isOutputPage) {
   const params = JSON.parse(sessionStorage.getItem("nmvParams") || "null");
   if (!params) { window.location.href = "index.html"; }
   const { method, epsilon, digits, maxIter, stopMode } = params;
-  const methodNames = { bisection: "Bisection", falseposition: "False Position", fixedpoint: "Simple Fixed Point", newton: "Newton-Raphson", secant: "Secant" };
+  const methodNames = { bisection: "Bisection", falseposition: "False Position", fixedpoint: "Simple Fixed Point", newton: "Newton-Raphson", secant: "Secant", golden: "Golden Section" };
   document.getElementById("methodLabel").textContent = "Method: " + methodNames[method];
   Chart.defaults.color = "hsl(215, 20%, 65%)";
   Chart.defaults.borderColor = "hsl(217, 33%, 25%)";
@@ -273,8 +392,11 @@ if (isOutputPage) {
   const isFP = method === "fixedpoint";
   const isN = method === "newton";
   const isSec = method === "secant";
+  const isGolden = method === "golden";
   const tabFunc = document.getElementById("tabFunc");
   if (isFP) tabFunc.classList.add("hidden");
+  const tabError = document.querySelector('[data-tab="errorTab"]');
+  if (isGolden && tabError) tabError.classList.add("hidden");
   const tableHead = document.getElementById("tableHead");
   if (isBracket) {
     tableHead.innerHTML = "<tr><th>Iter</th><th>xl</th><th>f(xl)</th><th>xu</th><th>f(xu)</th><th>xr</th><th>f(xr)</th><th>Error %</th></tr>";
@@ -284,6 +406,8 @@ if (isOutputPage) {
     tableHead.innerHTML = "<tr><th>Iter</th><th>xᵢ</th><th>f(xᵢ)</th><th>f'(xᵢ)</th><th>xᵢ₊₁</th><th>Error %</th></tr>";
   } else if (isSec) {
     tableHead.innerHTML = "<tr><th>Iter</th><th>xᵢ₋₁</th><th>f(xᵢ₋₁)</th><th>xᵢ</th><th>f(xᵢ)</th><th>xᵢ₊₁</th><th>Error %</th></tr>";
+  } else if (isGolden) {
+    tableHead.innerHTML = "<tr><th>I</th><th>xl</th><th>f(xl)</th><th>x2</th><th>f(x2)</th><th>x1</th><th>f(x1)</th><th>xu</th><th>f(xu)</th><th>d</th></tr>";
   }
   if (isBracket) {
     iterations = solveBracket(method, params.funcExpr, params.xl, params.xu, epsilon, maxIter);
@@ -293,6 +417,8 @@ if (isOutputPage) {
     iterations = solveNewton(params.funcExpr, params.dfExpr, params.x0, epsilon, maxIter);
   } else if (isSec) {
     iterations = solveSecant(params.funcExpr, params.x0, params.x1, epsilon, maxIter);
+  } else if (isGolden) {
+    iterations = solveGolden(params.funcExpr, params.xl, params.xu, params.optType, params.maxIter);
   }
   function renderRow(row) {
     const tr = document.createElement("tr");
@@ -304,15 +430,15 @@ if (isOutputPage) {
       tr.innerHTML = '<td>' + row.iteration + '</td><td>' + fmt(row.xi, digits) + '</td><td>' + fmt(row.fxi, digits) + '</td><td>' + fmt(row.fpxi, digits) + '</td><td class="highlight">' + fmt(row.xiPlus1, digits) + '</td><td>' + fmt(row.error, digits) + '</td>';
     } else if (isSec) {
       tr.innerHTML = '<td>' + row.iteration + '</td><td>' + fmt(row.xi_1, digits) + '</td><td>' + fmt(row.f_xi_1, digits) + '</td><td>' + fmt(row.xi, digits) + '</td><td>' + fmt(row.f_xi, digits) + '</td><td class="highlight">' + fmt(row.xiPlus1, digits) + '</td><td>' + fmt(row.error, digits) + '</td>';
+    } else if (isGolden) {
+      tr.innerHTML = '<td>' + row.iteration + '</td><td>' + fmt(row.xl, digits) + '</td><td>' + fmt(row.f_xl, digits) + '</td><td class="highlight">' + fmt(row.x2, digits) + '</td><td>' + fmt(row.f_x2, digits) + '</td><td class="highlight">' + fmt(row.x1, digits) + '</td><td>' + fmt(row.f_x1, digits) + '</td><td>' + fmt(row.xu, digits) + '</td><td>' + fmt(row.f_xu, digits) + '</td><td>' + fmt(row.d, digits) + '</td>';
     }
     document.getElementById("tableBody").appendChild(tr);
   }
-  renderRow(iterations[0]);
-  visibleCount = 1;
-  if (iterations.length === 1) { finished = true; showResult(); }
   function getXr(row) {
     if (isBracket) return row.xr;
     if (isFP) return row.gxi;
+    if (isGolden) return row.x2; // For visual approx and final root
     return row.xiPlus1;
   }
   const blueAccent = "hsl(230, 100%, 65%)";
@@ -332,13 +458,15 @@ if (isOutputPage) {
     const visible = iterations.slice(0, visibleCount);
     const labels = visible.map(function (r) { return r.iteration; });
     const xrData = visible.map(function (r) { return parseFloat(getXr(r).toFixed(digits)); });
-    const errData = visible.map(function (r) { return parseFloat(r.error.toFixed(digits)); });
+    const errData = visible.map(function (r) { return r.error !== undefined ? parseFloat(r.error.toFixed(digits)) : 0; });
     if (!isFP && params.funcExpr) {
       var allX;
       if (isBracket) {
         allX = visible.flatMap(function (r) { return [r.xl, r.xu, r.xr]; });
       } else if (isSec) {
         allX = visible.flatMap(function (r) { return [r.xi_1, r.xi, r.xiPlus1]; });
+      } else if (isGolden) {
+        allX = visible.flatMap(function (r) { return [r.xl, r.xu, r.x1, r.x2]; });
       } else {
         allX = visible.flatMap(function (r) { return [r.xi, r.xiPlus1]; });
       }
@@ -347,12 +475,13 @@ if (isOutputPage) {
       const lo = minX - pad, hi = maxX + pad, step = (hi - lo) / 200;
       const curve = [];
       for (let x = lo; x <= hi; x += step) {
-        try { curve.push({ x: +x.toFixed(6), y: +fEval(params.funcExpr, x).toFixed(6) }); } catch (e) {}
+        try { curve.push({ x: +x.toFixed(6), y: +fEval(params.funcExpr, x).toFixed(6) }); } catch (e) { }
       }
       const roots = visible.map(function (r) {
         var yVal;
         if (isBracket) yVal = r.f_xr;
         else if (isSec) yVal = r.f_xi;
+        else if (isGolden) yVal = r.f_x2;
         else yVal = r.fxi;
         return {
           x: +getXr(r).toFixed(digits),
@@ -424,17 +553,44 @@ if (isOutputPage) {
       },
     });
   }
+  visibleCount = iterations.length;
   updateCharts();
+  finished = true;
+  showResult();
+
   function showResult() {
-    document.getElementById("enterHint").classList.add("hidden");
     const root = getXr(iterations[iterations.length - 1]);
-    var resultText = "Root ≈ " + fmt(root, digits);
-    if (stopMode === "maxiter") {
+    var resultText = (isGolden ? (params.optType === "max" ? "Maximum" : "Minimum") + " ≈ " : "Root ≈ ") + fmt(root, digits);
+    if (stopMode === "maxiter" || isGolden) {
       resultText += "  (stopped at " + maxIter + " iterations)";
     }
     document.getElementById("rootValue").textContent = resultText;
+    if (isGolden) {
+      const succ = document.querySelector(".success-text");
+      if (succ) succ.textContent = "✅ Optimum Found Successfully";
+      convChartInst.data.datasets[0].label = "Optimum approximation";
+      convChartInst.update();
+    }
     document.getElementById("resultBox").classList.remove("hidden");
   }
+
+  const allStepsBtn = document.getElementById("allStepsBtn");
+  if (allStepsBtn) {
+    if (iterations.length <= 1) {
+      allStepsBtn.classList.add("hidden");
+    } else {
+      allStepsBtn.addEventListener("click", function () {
+        const tb = document.getElementById("tableBody");
+        tb.innerHTML = "";
+        for (let i = 0; i < iterations.length; i++) {
+          renderRow(iterations[i]);
+        }
+        document.getElementById("tableCard").classList.remove("hidden");
+        allStepsBtn.classList.add("hidden");
+      });
+    }
+  }
+
   document.querySelectorAll(".tab-btn").forEach(function (btn) {
     btn.addEventListener("click", function () {
       document.querySelectorAll(".tab-btn").forEach(function (b) { b.classList.remove("active"); });
@@ -443,18 +599,975 @@ if (isOutputPage) {
       document.getElementById(this.dataset.tab).classList.add("active");
     });
   });
-  window.addEventListener("keydown", function (e) {
-    if (e.key === "Enter" && !finished) {
-      e.preventDefault();
-      if (visibleCount < iterations.length) {
-        renderRow(iterations[visibleCount]);
-        visibleCount++;
-        updateCharts();
-        if (visibleCount >= iterations.length) {
-          finished = true;
-          showResult();
-        }
-      }
+}
+// Section switching
+const sectionButtons = document.querySelectorAll(".section-btn");
+const sections = document.querySelectorAll(".section");
+
+sectionButtons.forEach(button => {
+  button.addEventListener("click", () => {
+
+    const targetSection = button.dataset.section;
+
+    // hide all sections
+    sections.forEach(sec => sec.classList.add("hidden"));
+
+    // show selected section
+    document.getElementById(targetSection).classList.remove("hidden");
+
+    // reset polynomial method selection
+    const methodSelect = document.getElementById("methodSelect");
+    const inputSection = document.getElementById("inputSection");
+    const methodBadge = document.getElementById("methodBadge");
+
+    if (methodSelect) methodSelect.value = "";
+    if (inputSection) inputSection.classList.add("hidden");
+    if (methodBadge) methodBadge.classList.add("hidden");
+
+    // reset linear method selection
+    const linearMethodSelect = document.getElementById("linearMethodSelect");
+    const linearInputSection = document.getElementById("linearInputSection");
+    const linearMethodBadge = document.getElementById("linearMethodBadge");
+    const gaussOutputCard = document.getElementById("gaussOutputCard");
+    const linearMethodError = document.getElementById("linearMethodError");
+
+    if (linearMethodSelect) linearMethodSelect.value = "";
+    if (linearInputSection) linearInputSection.classList.add("hidden");
+    if (linearMethodBadge) linearMethodBadge.classList.add("hidden");
+    if (gaussOutputCard) gaussOutputCard.classList.add("hidden");
+    if (linearMethodError) linearMethodError.classList.add("hidden");
+
+    // reset unconstrained method selection
+    const unconMethodSelect = document.getElementById("unconMethodSelect");
+    const unconInputSection = document.getElementById("unconInputSection");
+    const unconMethodBadge = document.getElementById("unconMethodBadge");
+    if (unconMethodSelect) unconMethodSelect.value = "";
+    if (unconInputSection) unconInputSection.classList.add("hidden");
+    if (unconMethodBadge) unconMethodBadge.classList.add("hidden");
+
+  });
+});
+
+// Unconstrained Method Selection
+const unconMethodSelect = document.getElementById("unconMethodSelect");
+if (unconMethodSelect) {
+  unconMethodSelect.addEventListener("change", function () {
+    const m = this.value;
+    const unconInputSection = document.getElementById("unconInputSection");
+    const unconMethodBadge = document.getElementById("unconMethodBadge");
+    const errorBox = document.getElementById("errorBox");
+    errorBox.classList.add("hidden");
+    if (!m) {
+      unconInputSection.classList.add("hidden");
+      unconMethodBadge.classList.add("hidden");
+      return;
+    }
+    unconInputSection.classList.remove("hidden");
+    unconMethodBadge.textContent = "Golden Section Method";
+    unconMethodBadge.classList.remove("hidden");
+  });
+
+  document.getElementById("unconLoadExampleBtn").addEventListener("click", function () {
+    document.getElementById("unconOptType").value = "max";
+    document.getElementById("unconFuncExpr").value = "2 * sin(x) - (x^2 / 10)";
+    document.getElementById("unconXlInput").value = "0";
+    document.getElementById("unconXuInput").value = "4";
+    document.getElementById("unconMaxIterInput").value = "8";
+    document.getElementById("unconDigitsInput").value = "4";
+    document.getElementById("errorBox").classList.add("hidden");
+  });
+
+  document.getElementById("unconSolveBtn").addEventListener("click", function () {
+    const m = unconMethodSelect.value;
+    if (!m) return;
+    const optType = document.getElementById("unconOptType").value;
+    const funcExpr = document.getElementById("unconFuncExpr").value.trim();
+    const xl = parseFloat(document.getElementById("unconXlInput").value);
+    const xu = parseFloat(document.getElementById("unconXuInput").value);
+    const maxIter = parseInt(document.getElementById("unconMaxIterInput").value) || 8;
+    const digits = parseInt(document.getElementById("unconDigitsInput").value) || 4;
+    const errorBox = document.getElementById("errorBox");
+
+    if (!funcExpr || isNaN(xl) || isNaN(xu)) {
+      errorBox.textContent = "Please fill all required fields correctly.";
+      errorBox.classList.remove("hidden");
+      return;
+    }
+
+    try {
+      fEval(funcExpr, 1);
+      const params = { section: "unconstrained", method: m, optType, funcExpr, xl, xu, maxIter, digits };
+      sessionStorage.setItem("nmvParams", JSON.stringify(params));
+      window.location.href = "output.html";
+    } catch (e) {
+      errorBox.textContent = "Invalid expression. Use math.js syntax.";
+      errorBox.classList.remove("hidden");
     }
   });
 }
+
+// Linear Method Selection
+const linearMethodSelect = document.getElementById("linearMethodSelect");
+if (linearMethodSelect) {
+  linearMethodSelect.addEventListener("change", function () {
+    const m = this.value;
+    const linearInputSection = document.getElementById("linearInputSection");
+    const linearMethodBadge = document.getElementById("linearMethodBadge");
+    const linearActiveMethodBadge = document.getElementById("linearActiveMethodBadge");
+    const gaussOutputCard = document.getElementById("gaussOutputCard");
+    const gaussErrorEl = document.getElementById('gaussError');
+    const linearMethodError = document.getElementById('linearMethodError');
+
+    if (gaussOutputCard) gaussOutputCard.classList.add("hidden");
+    if (gaussErrorEl) gaussErrorEl.classList.add("hidden");
+    if (linearMethodError) linearMethodError.classList.add("hidden");
+
+    if (!m) {
+      linearInputSection.classList.add("hidden");
+      linearMethodBadge.classList.add("hidden");
+      return;
+    }
+
+    const linearMethodNames = {
+      gauss: "Gaussian Elimination",
+      lu: "The LU Factorization",
+      gaussjordan: "Gauss - Jordan",
+      cramer: "Cramer's Rule"
+    };
+
+    if (m !== "gauss" && m !== "lu" && m !== "gaussjordan" && m !== "cramer") {
+      linearInputSection.classList.add("hidden");
+      linearMethodBadge.textContent = linearMethodNames[m] || "";
+      linearMethodBadge.classList.remove("hidden");
+      if (linearMethodError) {
+        linearMethodError.textContent = "This method is currently under development!";
+        linearMethodError.classList.remove("hidden");
+      }
+      return;
+    }
+
+    if (m === "gaussjordan") {
+      document.getElementById("pivotingGroup").classList.remove("hidden");
+    } else {
+      document.getElementById("pivotingGroup").classList.add("hidden");
+    }
+
+    linearInputSection.classList.remove("hidden");
+    linearMethodBadge.textContent = linearMethodNames[m] || "";
+    linearMethodBadge.classList.remove("hidden");
+    if (linearActiveMethodBadge) {
+      linearActiveMethodBadge.textContent = linearMethodNames[m] || "";
+    }
+  });
+}
+
+// ═══════════════════════════════════════════
+// GAUSSIAN ELIMINATION — LINEAR SECTION
+// ═══════════════════════════════════════════
+(function () {
+  const gaussSizeEl = document.getElementById('gaussSize');
+  const gaussDigitsEl = document.getElementById('gaussDigits');
+  const gaussGridEl = document.getElementById('gaussEquationsList');
+  const gaussSolveBtn = document.getElementById('gaussSolveBtn');
+  const gaussExBtn = document.getElementById('gaussLoadExampleBtn');
+  const gaussErrorEl = document.getElementById('gaussError');
+  const gaussOutputCard = document.getElementById('gaussOutputCard');
+  const gaussOutputEl = document.getElementById('gaussOutput');
+
+  // ── subscript helpers ──────────────────────────────────────────
+  const SUB = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
+  function sub(n) { return String(n).split('').map(c => SUB[+c] ?? c).join(''); }
+
+  // ── Build n text inputs for equations ──────────────────────────────────
+  function buildGrid(n) {
+    gaussGridEl.innerHTML = '';
+    for (let i = 0; i < n; i++) {
+      var inp = document.createElement('input');
+      inp.type = 'text';
+      inp.id = 'eq_' + i;
+      inp.placeholder = 'Equation ' + (i + 1) + ' (e.g. x + y = 5)';
+      inp.className = 'gauss-equation-input';
+      gaussGridEl.appendChild(inp);
+    }
+  }
+
+  if (gaussSizeEl) {
+    gaussSizeEl.addEventListener('change', function () { buildGrid(+gaussSizeEl.value); });
+    buildGrid(+gaussSizeEl.value);
+
+    // ── Load textbook example (3×3) ───────────────────────────────
+    gaussExBtn.addEventListener('click', function () {
+      gaussSizeEl.value = '3';
+      buildGrid(3);
+      var eqs = [
+        '2x + 1y + 1z = 8',
+        '4x + 1y + 0z = 11',
+        '-2x + 2y + 1z = 3'
+      ];
+      for (var i = 0; i < 3; i++) {
+        document.getElementById('eq_' + i).value = eqs[i];
+      }
+      if (gaussOutputCard) gaussOutputCard.classList.add('hidden');
+      if (gaussErrorEl) gaussErrorEl.classList.add('hidden');
+    });
+  }
+
+  // ── Read matrix from equation inputs ───────────────────────────────────
+  function readMatrix(n) {
+    try {
+      var equations = [];
+      for (var i = 0; i < n; i++) {
+        var eqText = document.getElementById('eq_' + i).value.trim();
+        if (!eqText) {
+          gaussErrorEl.textContent = 'Please fill in all equations.';
+          return null;
+        }
+        equations.push(eqText);
+      }
+
+      var allVars = new Set();
+      var parsedExprs = [];
+
+      for (var i = 0; i < n; i++) {
+        var parts = equations[i].split('=');
+        var left = parts[0] || '0';
+        var right = parts[1] || '0';
+        var exprStr = '(' + left + ') - (' + right + ')';
+        var node = math.parse(exprStr);
+        var varsInNode = node.filter(function (n) { return n.isSymbolNode; });
+        varsInNode.forEach(function (v) { allVars.add(v.name); });
+        parsedExprs.push(node);
+      }
+
+      var varArray = Array.from(allVars).sort();
+
+      if (varArray.length > n) {
+        gaussErrorEl.textContent = 'Found ' + varArray.length + ' variables (' + varArray.join(', ') + '), but system size is ' + n + '.';
+        return null;
+      }
+
+      var A = [];
+      for (var i = 0; i < n; i++) {
+        var row = [];
+        var compiled = parsedExprs[i].compile();
+
+        var zeroScope = {};
+        varArray.forEach(function (v) { zeroScope[v] = 0; });
+        var C = compiled.evaluate(zeroScope);
+        var bVal = -C;
+
+        for (var j = 0; j < n; j++) {
+          if (j < varArray.length) {
+            var scope = {};
+            varArray.forEach(function (v) { scope[v] = 0; });
+            scope[varArray[j]] = 1;
+            var coef = compiled.evaluate(scope) - C;
+            row.push(coef);
+          } else {
+            row.push(0);
+          }
+        }
+        row.push(bVal);
+        A.push(row);
+      }
+
+      // Update SUB globals for variables display? The script hardcodes x1, x2, x3.
+      // We will store varArray to gaussState so we can show x, y, z instead of x1, x2, x3!
+      gaussState.varArray = varArray.length > 0 ? varArray : null;
+
+      return A;
+    } catch (e) {
+      gaussErrorEl.textContent = 'Error parsing equations. Use proper math syntax (e.g. 2x + 3y = 5).';
+      return null;
+    }
+  }
+
+  // ── Pretty-print number ───────────────────────────────────────
+  function pn(v, d) {
+    var r = parseFloat(v.toFixed(d));
+    return Object.is(r, -0) ? '0' : String(r);
+  }
+
+  // ── Build augmented-matrix HTML table ─────────────────────────
+  function matrixHTML(M, n, d) {
+    var html = '<div class="gauss-mat-wrap"><table class="gauss-mat">';
+    for (var i = 0; i < n; i++) {
+      html += '<tr>';
+      html += '<td class="mat-brk-l">[</td>';
+      for (var j = 0; j < n; j++) {
+        html += '<td class="mat-cell">' + pn(M[i][j], d) + '</td>';
+      }
+      html += '<td class="mat-pipe"> | </td>';
+      html += '<td class="mat-cell mat-b">' + pn(M[i][n], d) + '</td>';
+      html += '<td class="mat-brk-r">]</td>';
+      html += '</tr>';
+    }
+    html += '</table></div>';
+    return html;
+  }
+
+  function squareMatrixHTML(M, n, d) {
+    var html = '<div class="gauss-mat-wrap"><table class="gauss-mat">';
+    for (var i = 0; i < n; i++) {
+      html += '<tr>';
+      html += '<td class="mat-brk-l">[</td>';
+      for (var j = 0; j < n; j++) {
+        html += '<td class="mat-cell">' + pn(M[i][j], d) + '</td>';
+      }
+      html += '<td class="mat-brk-r">]</td>';
+      html += '</tr>';
+    }
+    html += '</table></div>';
+    return html;
+  }
+
+  // ── Gaussian Elimination with step recording ───────────────────
+  function gaussEliminate(M0, n, d) {
+    var M = M0.map(function (r) { return r.slice(); });
+    var steps = [];
+
+    var L = [];
+    for (var i = 0; i < n; i++) {
+      var row = new Array(n).fill(0);
+      row[i] = 1;
+      L.push(row);
+    }
+
+    function push(type, payload) { steps.push({ type: type, payload: payload }); }
+
+    push('header', 'Initial Augmented Matrix');
+    push('matrix', M.map(function (r) { return r.slice(); }));
+    push('header', 'Forward Elimination');
+
+    for (var j = 0; j < n - 1; j++) {
+      push('pivot-col', j);
+      for (var i = j + 1; i < n; i++) {
+        if (Math.abs(M[i][j]) < 1e-14) {
+          L[i][j] = 0;
+          continue;
+        }
+
+        var pivot = M[j][j];
+        var entry = M[i][j];
+        var mij = entry / pivot;
+
+        L[i][j] = mij;
+
+        push('multiplier', {
+          label: 'm' + sub(i + 1) + sub(j + 1),
+          top: 'a' + sub(i + 1) + sub(j + 1),
+          bot: 'a' + sub(j + 1) + sub(j + 1),
+          topVal: pn(entry, d),
+          botVal: pn(pivot, d),
+          mVal: pn(mij, d)
+        });
+
+        push('row-op', { i: i + 1, j: j + 1, m: pn(mij, d) });
+
+        for (var k = j; k <= n; k++) {
+          M[i][k] = M[i][k] - mij * M[j][k];
+          if (Math.abs(M[i][k]) < 1e-10) M[i][k] = 0;
+        }
+
+        push('matrix', M.map(function (r) { return r.slice(); }));
+      }
+    }
+
+    push('header', 'Upper Triangular Matrix');
+    push('matrix', M.map(function (r) { return r.slice(); }));
+    push('header', 'Back Substitution');
+
+    var x = new Array(n).fill(0);
+    for (var ii = n - 1; ii >= 0; ii--) {
+      var sum = M[ii][n];
+      var terms = [];
+      for (var kk = ii + 1; kk < n; kk++) {
+        sum -= M[ii][kk] * x[kk];
+        terms.push({ coef: pn(M[ii][kk], d), xk: kk + 1, val: pn(x[kk], d) });
+      }
+      x[ii] = sum / M[ii][ii];
+      push('back-sub', {
+        xi: ii + 1,
+        bVal: pn(M[ii][n], d),
+        a_ii: pn(M[ii][ii], d),
+        terms: terms,
+        result: pn(x[ii], d)
+      });
+    }
+
+    var U = M.map(function (r) { return r.slice(0, n); });
+    var origB = M0.map(function (r) { return r[n]; });
+
+    push('solution', x.map(function (v, idx) { return { xi: idx + 1, val: pn(v, d) }; }));
+    return { steps: steps, solution: x, L: L, U: U, origB: origB };
+  }
+
+  // ── Gauss-Jordan Elimination with step recording ───────────────────
+  function gaussJordanEliminate(M0, n, d, usePivoting) {
+    var M = M0.map(function (r) { return r.slice(); });
+    var steps = [];
+
+    function push(type, payload) { steps.push({ type: type, payload: payload }); }
+
+    push('header', 'Initial Augmented Matrix');
+    push('matrix', M.map(function (r) { return r.slice(); }));
+
+    for (var j = 0; j < n; j++) {
+      push('header', 'Column ' + (j + 1) + ' Elimination');
+      push('pivot-col', j);
+
+      if (usePivoting) {
+        var maxRow = j;
+        var maxVal = Math.abs(M[j][j]);
+        for (var i = j + 1; i < n; i++) {
+          if (Math.abs(M[i][j]) > maxVal) {
+            maxVal = Math.abs(M[i][j]);
+            maxRow = i;
+          }
+        }
+        if (maxRow !== j) {
+          push('header', 'Partial Pivoting: Swapped Row ' + (j + 1) + ' and Row ' + (maxRow + 1));
+          var temp = M[j];
+          M[j] = M[maxRow];
+          M[maxRow] = temp;
+          push('matrix', M.map(function (r) { return r.slice(); }));
+        }
+      }
+
+      var pivot = M[j][j];
+      if (Math.abs(pivot) < 1e-14) {
+        push('header', 'Error: Pivot is 0. Cannot proceed.');
+        break;
+      }
+
+      // Make pivot 1
+      if (Math.abs(pivot - 1.0) > 1e-14) {
+        var multiplier = 1.0 / pivot;
+        for (var k = j; k <= n; k++) {
+          M[j][k] = M[j][k] * multiplier;
+          if (Math.abs(M[j][k]) < 1e-10) M[j][k] = 0;
+        }
+        push('row-op', { i: j + 1, j: j + 1, m: '(' + pn(pivot, d) + ')', isDiv: true });
+        push('matrix', M.map(function (r) { return r.slice(); }));
+      }
+
+      // Eliminate all other entries in column j
+      var eliminatedAny = false;
+      for (var i = 0; i < n; i++) {
+        if (i !== j) {
+          var factor = M[i][j];
+          if (Math.abs(factor) > 1e-14) {
+            eliminatedAny = true;
+            for (var k = j; k <= n; k++) {
+              M[i][k] = M[i][k] - factor * M[j][k];
+              if (Math.abs(M[i][k]) < 1e-10) M[i][k] = 0;
+            }
+            push('row-op', { i: i + 1, j: j + 1, m: pn(factor, d) });
+          }
+        }
+      }
+      if (eliminatedAny) {
+        push('matrix', M.map(function (r) { return r.slice(); }));
+      }
+    }
+
+    push('header', 'Final Reduced Row Echelon Form (Identity Matrix)');
+    var x = new Array(n).fill(0);
+    for (var i = 0; i < n; i++) {
+      x[i] = M[i][n];
+    }
+
+    push('solution', x.map(function (v, idx) { return { xi: idx + 1, val: pn(v, d) }; }));
+    return { steps: steps, solution: x };
+  }
+
+  // ── Cramer's Rule with step recording ─────────────────────────────
+  function cramerSolve(M0, n, d) {
+    var M = M0.map(function (r) { return r.slice(); });
+    var steps = [];
+    var x = new Array(n).fill(0);
+
+    function push(type, payload) { steps.push({ type: type, payload: payload }); }
+
+    push('header', 'Initial Augmented Matrix');
+    push('matrix', M.map(function (r) { return r.slice(); }));
+
+    // Extract A and b
+    var A = M.map(function (r) { return r.slice(0, n); });
+    var b = M.map(function (r) { return r[n]; });
+
+    var D = math.det(A);
+    push('cramer-det', { label: 'D (Main Determinant)', mat: A.map(function (r) { return r.slice(); }), det: pn(D, d) });
+
+    if (Math.abs(D) < 1e-14) {
+      push('header', '<span style="color:red">Error: Main Determinant D is 0. The system has no unique solution.</span>');
+      return { steps: steps, solution: null, error: true };
+    }
+
+    push('header', 'Calculating Variable Determinants');
+
+    for (var i = 0; i < n; i++) {
+      var Ai = A.map(function (r) { return r.slice(); });
+      for (var r = 0; r < n; r++) {
+        Ai[r][i] = b[r];
+      }
+      var Di = math.det(Ai);
+      x[i] = Di / D;
+
+      push('cramer-sub', {
+        label: 'D' + (i + 1),
+        varName: getVarName(i + 1),
+        mat: Ai.map(function (r) { return r.slice(); }),
+        det: pn(Di, d),
+        xi: pn(x[i], d),
+        D: pn(D, d)
+      });
+    }
+
+    push('solution', x.map(function (v, idx) { return { xi: idx + 1, val: pn(v, d) }; }));
+    return { steps: steps, solution: x, error: false };
+  }
+
+  // ── Render steps to HTML ──────────────────────────────────────
+  function renderSteps(steps, n, d) {
+    var html = '';
+    for (var s = 0; s < steps.length; s++) {
+      var st = steps[s];
+      switch (st.type) {
+        case 'header':
+          html += '<div class="gs-header">' + st.payload + '</div>';
+          break;
+
+        case 'pivot-col':
+          var jj = st.payload;
+          html += '<div class="gs-pivot">Pivot column: <strong>j = ' + (jj + 1) + '</strong>' +
+            '&nbsp;&nbsp;(pivot element = a' + sub(jj + 1) + sub(jj + 1) + ')</div>';
+          break;
+
+        case 'multiplier':
+          var p = st.payload;
+          html += '<div class="gs-line gs-multiplier">' +
+            '<span class="gs-lbl">' + p.label + '</span>' +
+            '<span class="gs-eq">= ' + p.top + ' / ' + p.bot +
+            ' = ' + p.topVal + ' / ' + p.botVal +
+            ' = <strong>' + p.mVal + '</strong></span>' +
+            '</div>';
+          break;
+
+        case 'row-op':
+          var ro = st.payload;
+          html += '<div class="gs-line gs-rowop">' +
+            'E' + sub(ro.i) + ' &minus; (<strong>' + ro.m + '</strong>) &middot; E' + sub(ro.j) +
+            ' &rarr; E' + sub(ro.i) +
+            '</div>';
+          break;
+
+        case 'matrix':
+          html += matrixHTML(st.payload, n, d);
+          break;
+
+        case 'back-sub':
+          var bs = st.payload;
+          // Formula line
+          var formula = 'x' + sub(bs.xi) + ' = (' + bs.bVal;
+          for (var t = 0; t < bs.terms.length; t++) {
+            formula += ' &minus; (' + bs.terms[t].coef + ')&middot;x' + sub(bs.terms[t].xk);
+          }
+          formula += ') / ' + bs.a_ii + ' = <strong>' + bs.result + '</strong>';
+          // Substituted values line
+          var subst = 'x' + sub(bs.xi) + ' = (' + bs.bVal;
+          for (var t2 = 0; t2 < bs.terms.length; t2++) {
+            subst += ' &minus; (' + bs.terms[t2].coef + ')&middot;(' + bs.terms[t2].val + ')';
+          }
+          subst += ') / ' + bs.a_ii + ' = <strong>' + bs.result + '</strong>';
+
+          html += '<div class="gs-line gs-backsub">' +
+            '<div>' + formula + '</div>' +
+            (bs.terms.length > 0 ? '<div class="gs-sub-detail">' + subst + '</div>' : '') +
+            '</div>';
+          break;
+
+        case 'solution':
+          html += '<div class="gs-header">Final Solution</div>';
+          html += '<div class="gs-solution">';
+          for (var sv = 0; sv < st.payload.length; sv++) {
+            html += '<div class="gs-sol-row">x' + sub(st.payload[sv].xi) +
+              ' = <span>' + st.payload[sv].val + '</span></div>';
+          }
+          html += '</div>';
+          break;
+      }
+    }
+    return html;
+  }
+
+  // ── Step-by-step state ────────────────────────────────────────
+  var gaussState = {
+    steps: [],
+    visible: 0,
+    n: 3,
+    d: 4,
+    finished: false,
+    active: false,
+    varArray: null
+  };
+
+  function getVarName(index) {
+    if (gaussState.varArray && gaussState.varArray.length > 0) {
+      if (index - 1 < gaussState.varArray.length) {
+        return gaussState.varArray[index - 1];
+      }
+    }
+    return 'x' + sub(index);
+  }
+
+  // Renders one step block and appends it to the output container
+  function renderOneStep(st) {
+    var n = gaussState.n, d = gaussState.d;
+    var html = '';
+    switch (st.type) {
+      case 'header':
+        html = '<div class="gs-header">' + st.payload + '</div>';
+        break;
+      case 'pivot-col':
+        var jj = st.payload;
+        html = '<div class="gs-pivot">Pivot column: <strong>j = ' + (jj + 1) + '</strong>' +
+          '&nbsp;&nbsp;(pivot element = a' + sub(jj + 1) + sub(jj + 1) + ')</div>';
+        break;
+      case 'multiplier':
+        var p = st.payload;
+        html = '<div class="gs-line gs-multiplier">' +
+          '<span class="gs-lbl">' + p.label + '</span>' +
+          '<span class="gs-eq">= ' + p.top + ' / ' + p.bot +
+          ' = ' + p.topVal + ' / ' + p.botVal +
+          ' = <strong>' + p.mVal + '</strong></span>' +
+          '</div>';
+        break;
+      case 'row-op':
+        var ro = st.payload;
+        html = '<div class="gs-line gs-rowop">' +
+          'E' + sub(ro.i) + ' &minus; (<strong>' + ro.m + '</strong>) &middot; E' + sub(ro.j) +
+          ' &rarr; E' + sub(ro.i) +
+          '</div>';
+        break;
+      case 'matrix':
+        html = matrixHTML(st.payload, n, d);
+        break;
+      case 'back-sub':
+        var bs = st.payload;
+        var formula = getVarName(bs.xi) + ' = (' + bs.bVal;
+        for (var t = 0; t < bs.terms.length; t++) {
+          formula += ' &minus; (' + bs.terms[t].coef + ')&middot;' + getVarName(bs.terms[t].xk);
+        }
+        formula += ') / ' + bs.a_ii + ' = <strong>' + bs.result + '</strong>';
+        var subst = getVarName(bs.xi) + ' = (' + bs.bVal;
+        for (var t2 = 0; t2 < bs.terms.length; t2++) {
+          subst += ' &minus; (' + bs.terms[t2].coef + ')&middot;(' + bs.terms[t2].val + ')';
+        }
+        subst += ') / ' + bs.a_ii + ' = <strong>' + bs.result + '</strong>';
+        html = '<div class="gs-line gs-backsub">' +
+          '<div>' + formula + '</div>' +
+          (bs.terms.length > 0 ? '<div class="gs-sub-detail">' + subst + '</div>' : '') +
+          '</div>';
+        break;
+      case 'cramer-det':
+        var cd = st.payload;
+        html = '<div class="gs-header">' + cd.label + ' = <strong>' + cd.det + '</strong></div>' +
+          squareMatrixHTML(cd.mat, n, d);
+        break;
+      case 'cramer-sub':
+        var cs = st.payload;
+        html = '<div class="gs-line" style="margin-bottom: 1.5rem;">' +
+          '<div class="gs-header">' + cs.label + ' = <strong>' + cs.det + '</strong></div>' +
+          squareMatrixHTML(cs.mat, n, d) +
+          '<div class="gs-backsub" style="margin-top: 0.5rem; background: rgba(0,0,0,0.1); padding: 0.5rem; border-radius: 4px;">' +
+          cs.varName + ' = ' + cs.label + ' / D = ' + cs.det + ' / ' + cs.D + ' = <strong>' + cs.xi + '</strong>' +
+          '</div>' +
+          '</div>';
+        break;
+      case 'solution':
+        html = '<div><div class="gs-header">Final Solution</div>' +
+          '<div class="gs-solution">';
+        for (var sv = 0; sv < st.payload.length; sv++) {
+          html += '<div class="gs-sol-row">' + getVarName(st.payload[sv].xi) +
+            ' = <span>' + st.payload[sv].val + '</span></div>';
+        }
+        html += '</div></div>';
+        break;
+    }
+    var el = document.createElement('div');
+    el.innerHTML = html;
+    gaussOutputEl.appendChild(el.firstElementChild || el);
+  }
+
+  function gaussShowNext() {
+    if (gaussState.finished || !gaussState.active) return;
+    if (gaussState.visible < gaussState.steps.length) {
+      renderOneStep(gaussState.steps[gaussState.visible]);
+      gaussState.visible++;
+      // Scroll the new step into view
+      gaussOutputEl.lastElementChild &&
+        gaussOutputEl.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    if (gaussState.visible >= gaussState.steps.length) {
+      gaussState.finished = true;
+    }
+  }
+
+  // ── Solve button click ────────────────────────────────────────
+  gaussSolveBtn.addEventListener('click', function () {
+    gaussErrorEl.classList.add('hidden');
+    gaussOutputCard.classList.add('hidden');
+    gaussOutputEl.innerHTML = '';
+
+    var n = +gaussSizeEl.value;
+    var d = parseInt(gaussDigitsEl.value);
+    if (isNaN(d) || d < 0) d = 4;
+
+    var M = readMatrix(n);
+    if (!M) {
+      gaussErrorEl.textContent = 'Please fill in all equations properly.';
+      gaussErrorEl.classList.remove('hidden');
+      return;
+    }
+
+    const m = document.getElementById('linearMethodSelect').value || 'gauss';
+
+    // Check for zero pivot (only for Gauss-based methods)
+    const usePivoting = document.getElementById("pivotingSelect").value === "with";
+
+    if (m !== 'cramer' && !(m === 'gaussjordan' && usePivoting)) {
+      var tempM = M.map(function (r) { return r.slice(); });
+      for (var j = 0; j < n; j++) {
+        if (Math.abs(tempM[j][j]) < 1e-14) {
+          gaussErrorEl.textContent =
+            'Pivot a' + (j + 1) + (j + 1) + ' = 0. The matrix may be singular or requires partial pivoting.';
+          gaussErrorEl.classList.remove('hidden');
+          return;
+        }
+      }
+    }
+
+    if (m === 'cramer') {
+      var result = cramerSolve(M, n, d);
+      gaussState.steps = result.steps;
+      gaussState.visible = 0;
+      gaussState.n = n;
+      gaussState.d = d;
+      gaussState.finished = false;
+      gaussState.active = true;
+
+      gaussOutputCard.classList.remove('hidden');
+      document.getElementById('gaussLUBtn').classList.add('hidden');
+      document.getElementById('luOutput').innerHTML = '';
+      gaussOutputCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      if (result.error) {
+        document.getElementById('gaussAllStepsBtn').classList.add('hidden');
+        renderOneStep(gaussState.steps[gaussState.steps.length - 1]); // Show error step
+      } else {
+        document.getElementById('gaussAllStepsBtn').classList.remove('hidden');
+        renderOneStep(gaussState.steps[gaussState.steps.length - 1]); // Show final solution
+      }
+
+    } else if (m === 'gaussjordan') {
+      var result = gaussJordanEliminate(M, n, d, usePivoting);
+      gaussState.steps = result.steps;
+      gaussState.visible = 0;
+      gaussState.n = n;
+      gaussState.d = d;
+      gaussState.finished = false;
+      gaussState.active = true;
+
+      gaussOutputCard.classList.remove('hidden');
+      document.getElementById('gaussAllStepsBtn').classList.remove('hidden');
+      document.getElementById('gaussLUBtn').classList.add('hidden');
+      document.getElementById('luOutput').innerHTML = '';
+      gaussOutputCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      renderOneStep(gaussState.steps[gaussState.steps.length - 1]);
+
+    } else {
+      var result = gaussEliminate(M, n, d);
+      gaussState.steps = result.steps;
+      gaussState.visible = 0;
+      gaussState.n = n;
+      gaussState.d = d;
+      gaussState.finished = false;
+      gaussState.active = true;
+      gaussState.L = result.L;
+      gaussState.U = result.U;
+      gaussState.origB = result.origB;
+
+      gaussOutputCard.classList.remove('hidden');
+
+      if (m === 'lu') {
+        document.getElementById('gaussAllStepsBtn').classList.remove('hidden');
+        document.getElementById('gaussLUBtn').classList.add('hidden');
+        document.getElementById('luOutput').innerHTML = ''; // clear previous LU output
+        gaussOutputCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        renderOneStep(gaussState.steps[gaussState.steps.length - 1]);
+      } else { // gauss
+        document.getElementById('gaussAllStepsBtn').classList.remove('hidden');
+        document.getElementById('gaussLUBtn').classList.remove('hidden');
+        document.getElementById('luOutput').innerHTML = ''; // clear previous LU output
+        gaussOutputCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        renderOneStep(gaussState.steps[gaussState.steps.length - 1]);
+      }
+    }
+  });
+
+  // ── Button clicks advance steps ───────────────────────────────
+  document.getElementById('gaussAllStepsBtn').addEventListener('click', function () {
+    if (gaussState.active && !gaussState.finished) {
+      gaussOutputEl.innerHTML = '';
+      const m = document.getElementById('linearMethodSelect').value || 'gauss';
+      if (m === 'lu') {
+        renderLUOutput();
+      } else {
+        for (var i = 0; i < gaussState.steps.length; i++) {
+          renderOneStep(gaussState.steps[i]);
+        }
+      }
+      gaussState.finished = true;
+      this.classList.add('hidden');
+    }
+  });
+
+  function renderLUOutput() {
+    var luOutput = document.getElementById('luOutput');
+    luOutput.innerHTML = '';
+
+    var n = gaussState.n;
+    var d = gaussState.d;
+    var L = gaussState.L;
+    var U = gaussState.U;
+    var b = gaussState.origB;
+
+    function addHeader(title) {
+      var el = document.createElement('div');
+      el.className = 'gs-header';
+      el.textContent = title;
+      luOutput.appendChild(el);
+    }
+
+    function addMatrix(M_in, isAugmented) {
+      var html = '<div class="gauss-mat-wrap"><table class="gauss-mat">';
+      for (var i = 0; i < n; i++) {
+        html += '<tr><td class="mat-brk-l">[</td>';
+        for (var j = 0; j < n; j++) {
+          html += '<td class="mat-cell">' + pn(M_in[i][j], d) + '</td>';
+        }
+        if (isAugmented) {
+          html += '<td class="mat-pipe"> | </td>';
+          html += '<td class="mat-cell mat-b">' + pn(M_in[i][n], d) + '</td>';
+        }
+        html += '<td class="mat-brk-r">]</td></tr>';
+      }
+      html += '</table></div>';
+      var el = document.createElement('div');
+      el.innerHTML = html;
+      luOutput.appendChild(el.firstElementChild || el);
+    }
+
+    addHeader('L Matrix (from Multipliers)');
+    addMatrix(L, false);
+
+    addHeader('U Matrix (from Forward Elimination)');
+    addMatrix(U, false);
+
+    addHeader('Step 1: Solve Ly = b (Forward Substitution)');
+    var Laug = [];
+    for (var i = 0; i < n; i++) {
+      var r = L[i].slice();
+      r.push(b[i]);
+      Laug.push(r);
+    }
+    addMatrix(Laug, true);
+
+    var y = new Array(n).fill(0);
+    for (var ii = 0; ii < n; ii++) {
+      var sum = b[ii];
+      var formula = 'y' + sub(ii + 1) + ' = (' + pn(b[ii], d);
+      var subst = 'y' + sub(ii + 1) + ' = (' + pn(b[ii], d);
+      var terms = 0;
+      for (var kk = 0; kk < ii; kk++) {
+        sum -= L[ii][kk] * y[kk];
+        formula += ' &minus; (' + pn(L[ii][kk], d) + ')&middot;y' + sub(kk + 1);
+        subst += ' &minus; (' + pn(L[ii][kk], d) + ')&middot;(' + pn(y[kk], d) + ')';
+        terms++;
+      }
+      y[ii] = sum / L[ii][ii];
+      formula += ') / ' + pn(L[ii][ii], d) + ' = <strong>' + pn(y[ii], d) + '</strong>';
+      subst += ') / ' + pn(L[ii][ii], d) + ' = <strong>' + pn(y[ii], d) + '</strong>';
+
+      var html = '<div class="gs-line gs-backsub">' +
+        '<div>' + formula + '</div>' +
+        (terms > 0 ? '<div class="gs-sub-detail">' + subst + '</div>' : '') +
+        '</div>';
+      var el = document.createElement('div');
+      el.innerHTML = html;
+      luOutput.appendChild(el.firstElementChild || el);
+    }
+
+    addHeader('Step 2: Solve Ux = y (Backward Substitution)');
+    var Uaug = [];
+    for (var i = 0; i < n; i++) {
+      var r = U[i].slice();
+      r.push(y[i]);
+      Uaug.push(r);
+    }
+    addMatrix(Uaug, true);
+
+    var x = new Array(n).fill(0);
+    for (var ii = n - 1; ii >= 0; ii--) {
+      var sum = y[ii];
+      var formula = getVarName(ii + 1) + ' = (' + pn(y[ii], d);
+      var subst = getVarName(ii + 1) + ' = (' + pn(y[ii], d);
+      var terms = 0;
+      for (var kk = ii + 1; kk < n; kk++) {
+        sum -= U[ii][kk] * x[kk];
+        formula += ' &minus; (' + pn(U[ii][kk], d) + ')&middot;' + getVarName(kk + 1);
+        subst += ' &minus; (' + pn(U[ii][kk], d) + ')&middot;(' + pn(x[kk], d) + ')';
+        terms++;
+      }
+      x[ii] = sum / U[ii][ii];
+      formula += ') / ' + pn(U[ii][ii], d) + ' = <strong>' + pn(x[ii], d) + '</strong>';
+      subst += ') / ' + pn(U[ii][ii], d) + ' = <strong>' + pn(x[ii], d) + '</strong>';
+
+      var html = '<div class="gs-line gs-backsub">' +
+        '<div>' + formula + '</div>' +
+        (terms > 0 ? '<div class="gs-sub-detail">' + subst + '</div>' : '') +
+        '</div>';
+      var el = document.createElement('div');
+      el.innerHTML = html;
+      luOutput.appendChild(el.firstElementChild || el);
+    }
+
+    addHeader('Final Solution (from LU)');
+    var solHtml = '<div class="gs-solution">';
+    for (var sv = 0; sv < n; sv++) {
+      solHtml += '<div class="gs-sol-row">' + getVarName(sv + 1) +
+        ' = <span>' + pn(x[sv], d) + '</span></div>';
+    }
+    solHtml += '</div>';
+    var solEl = document.createElement('div');
+    solEl.innerHTML = solHtml;
+    luOutput.appendChild(solEl.firstElementChild || solEl);
+
+    luOutput.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  document.getElementById('gaussLUBtn').addEventListener('click', function () {
+    if (!gaussState.active) return;
+
+    // Automatically finish Gauss steps
+    if (!gaussState.finished) {
+      document.getElementById('gaussAllStepsBtn').click();
+    }
+
+    this.classList.add('hidden'); // Hide the LU button itself
+    renderLUOutput();
+
+  });
+}());
+
